@@ -61,7 +61,9 @@ void ApplyFastPair(DeviceStatus& s, const FastPairBattery& b) {
         s.percent = disLo >= 0 ? disLo : chgLo;
         s.charging = disLo < 0;
     }
-    auto part = [&](const wchar_t* label, int pct, bool chg) {
+    s.left = b.left;
+    s.right = b.right;
+    auto part =[&](const wchar_t* label, int pct, bool chg) {
         if (pct < 0) return;
         if (!s.detail.empty()) s.detail += L", ";
         s.detail += label + std::to_wstring(pct) + L"%" + (chg ? L" \x26A1" : L"");

@@ -589,6 +589,8 @@ void UpdateWidget() {
         it.percent = offline ? -1 : (e->st.percent >= 0 ? e->st.percent : e->lastPct);
         if (offline) it.text = L"\u00D7";  // clear status, not a stale percentage
         else if (e->st.percent >= 0) it.text = T(e->st.levelText);
+        // Live left / right levels only: never for a stale, offline or coarse ("Low") reading.
+        if (!offline && e->st.percent >= 0 && e->st.levelText.empty()) it.pairText = LeftRightText(e->st.left, e->st.right);
         it.charging = !offline && !e->st.asleep && e->st.charging;
         it.full = !offline && (e->st.full || (e->st.charging && it.percent >= 100));
         it.dim = offline || e->st.percent < 0;

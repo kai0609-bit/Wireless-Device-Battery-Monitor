@@ -12,6 +12,7 @@ struct WidgetItem {
     DeviceKind kind = DeviceKind::Other;
     int  percent  = -1;     // -1 = unknown
     std::wstring text;      // shown instead of the percentage when set (coarse levels like "Low")
+    std::wstring pairText;  // "L63% R73%": shown instead of both on a horizontal taskbar (not in the vertical column)
     bool charging = false;
     bool full     = false;  // on power and fully charged: a green check mark instead of the bolt
     bool dim      = false;  // asleep / stale value

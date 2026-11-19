@@ -428,7 +428,9 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
             icon.haloAlpha = g_light ? 60 : 140;
         }
         out.push_back(std::move(icon));
-        std::wstring t = !it.text.empty() ? it.text : it.percent >= 0 ? std::to_wstring(it.percent) + L"%" : L"?";
+        std::wstring t = !g_vertical && !it.pairText.empty() ? it.pairText
+                       : !it.text.empty()                    ? it.text
+                       : it.percent >= 0                     ? std::to_wstring(it.percent) + L"%" : L"?";
         Piece label{ RenderMask(t, text, g_light), tc, a, mark ? Px(2) : 0 };
         if (branded && it.percent >= 0) {
             label.barPct = it.percent;
