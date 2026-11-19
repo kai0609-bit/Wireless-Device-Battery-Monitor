@@ -363,3 +363,29 @@ void PollBluetooth(PollContext& ctx) {
         ctx.btContainers.insert(cid);
     }
 }
+
+std::vector<PairedBtDevice> PairedBluetoothDevices() {
+    std::vector<PairedBtDevice> out;
+    HDEVINFO di = SetupDiGetClassDevsW(nullptr, nullptr, nullptr, DIGCF_ALLCLASSES);  // not only present ones
+    if (di == INVALID_HANDLE_VALUE) return out;
+    SP_DEVINFO_DATA dd{ sizeof(dd) };
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(di, i, &dd); i++) {
+        wchar_t inst[512];
+        if (!SetupDiGetDeviceInstanceIdW(di, &dd, inst, 512, nullptr)) continue;
+        bool le = !wcsncmp(inst, L"BTHLE\\DEV_", 10);
+        if (!le && wcsncmp(inst, L"BTHENUM\\DEV_", 12)) continue;
+        PairedBtDevice d;
+        d.addr = BtAddress(inst);
+        if (!d.addr) continue;
+        d.le = le;
+        d.name = StrProp(di, &dd, DEVPKEY_Device_FriendlyName);
+        if (d.name.empty()) d.name = StrProp(di, &dd, DEVPKEY_Device_DeviceDesc);
+        DEVPROPTYPE t;
+        DEVPROP_BOOLEAN conn;
+        if (SetupDiGetDevicePropertyW(di, &dd, &kIsConnected, &t, (PBYTE)&conn, sizeof(conn), nullptr, 0) && t == DEVPROP_TYPE_BOOLEAN)
+            d.connected = conn != DEVPROP_FALSE ? 1 : 0;
+        out.push_back(std::move(d));
+    }
+    SetupDiDestroyDeviceInfoList(di);
+    return out;
+}

@@ -27,3 +27,7 @@ std::vector<DeviceStatus> PollAllDevices();
 
 // Prints every HID collection (for adding support for new devices).
 std::wstring DumpHidCollections();
+
+// Listens ~10 s for Google Fast Pair broadcasts and lists them with the paired Bluetooth devices
+// (Windows only, `--dump` only: the support report does not wait for it). See drivers/fastpair.cpp.
+std::wstring DumpFastPairAdverts();

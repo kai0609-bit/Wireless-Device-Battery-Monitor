@@ -22,3 +22,12 @@ struct FastPairBattery {
 };
 // Latest broadcast of the device with this Bluetooth address, if heard in the last 5 minutes.
 bool FastPairLookup(UINT64 addr, FastPairBattery& out);
+
+// `--dump` diagnostics (fastpair.cpp). Only while active is every 0xFE2C service data section kept,
+// including ones the parser rejects; the normal path above is untouched.
+// addrType: -1 unknown, 0 public, 1 random, 2 unspecified (WinRT BluetoothAddressType).
+bool FastPairDiagActive();
+void FastPairDiagRecord(UINT64 addr, int addrType, int rssi, const BYTE* data, UINT32 len);
+// Watcher status: -1 never created, else WinRT BluetoothLEAdvertisementWatcherStatus
+// (0 Created, 1 Started, 2 Stopping, 3 Stopped, 4 Aborted).
+int BleWatcherStatus();

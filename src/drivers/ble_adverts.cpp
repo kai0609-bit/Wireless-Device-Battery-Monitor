@@ -77,6 +77,13 @@ struct IReceivedArgs : IInspectable {
     virtual HRESULT STDMETHODCALLTYPE get_Advertisement(IAdvertisement** v) = 0;
 };
 
+// IBluetoothLEAdvertisementReceivedEventArgs2 (Windows 10 2004+); only its first method is used.
+const GUID IID_ReceivedArgs2 = { 0x12d9c87b, 0x0399, 0x5f0e, { 0xa3, 0x48, 0x53, 0xb0, 0x2b, 0x6b, 0x16, 0x2e } };
+
+struct IReceivedArgs2 : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_BluetoothAddressType(INT32* v) = 0;
+};
+
 struct IWatcher : IInspectable {
     virtual HRESULT STDMETHODCALLTYPE get_MinSamplingInterval(INT64* v) = 0;
     virtual HRESULT STDMETHODCALLTYPE get_MaxSamplingInterval(INT64* v) = 0;
@@ -121,6 +128,15 @@ bool Bytes(IBufferAbi* buf, BYTE*& p, UINT32& len) {
     return ok;
 }
 
+// Public / random, when this Windows exposes it (-1 otherwise). Only asked for during `--dump`.
+int AddressType(IReceivedArgs* args) {
+    IReceivedArgs2* a2 = nullptr;
+    INT32 t = -1;
+    if (FAILED(args->QueryInterface(IID_ReceivedArgs2, (void**)&a2)) || !a2 || FAILED(a2->get_BluetoothAddressType(&t))) t = -1;
+    Release(a2);
+    return t;
+}
+
 void OnReceived(IReceivedArgs* args) {
     IAdvertisement* adv = nullptr;
     if (FAILED(args->get_Advertisement(&adv)) || !adv) return;
@@ -156,9 +172,11 @@ void OnReceived(IReceivedArgs* args) {
             BYTE* p;
             UINT32 len;
             // Service data starts with the 16-bit UUID, little-endian: 2C FE = Google Fast Pair.
-            if (SUCCEEDED(sview->GetAt(i, &sec)) && sec && SUCCEEDED(sec->get_Data(&buf)) && Bytes(buf, p, len) && len > 2 &&
-                p[0] == 0x2C && p[1] == 0xFE)
-                FastPairOnAdvert(addr, p + 2, len - 2);
+            if (SUCCEEDED(sview->GetAt(i, &sec)) && sec && SUCCEEDED(sec->get_Data(&buf)) && Bytes(buf, p, len) && len >= 2 &&
+                p[0] == 0x2C && p[1] == 0xFE) {
+                if (len > 2) FastPairOnAdvert(addr, p + 2, len - 2);
+                if (FastPairDiagActive()) FastPairDiagRecord(addr, AddressType(args), rssi, p + 2, len - 2);
+            }
             Release(buf);
             Release(sec);
         }
@@ -219,4 +237,10 @@ bool EnsureBleWatcher() {
     if (SUCCEEDED(g_watcher->get_Status(&st)) && (st == kWatcherStopped || st == kWatcherAborted))
         return SUCCEEDED(g_watcher->Start());
     return false;
+}
+
+int BleWatcherStatus() {
+    INT32 st = -1;
+    if (!g_watcher || FAILED(g_watcher->get_Status(&st))) return -1;
+    return st;
 }

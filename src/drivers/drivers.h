@@ -126,6 +126,14 @@ void PollRazerHeadsets(PollContext& ctx);  // BlackShark V2 HyperSpeed / V2 Pro 
 void PollFantech(PollContext& ctx);   // Fantech Helios Go XD5 (wired 25A7:FA7B, dongle 25A7:FA7C)
 std::wstring DumpXentaFrames();        // raw Xenta (1D57) status frames, for `--dump`
 std::wstring DumpAstroFrames();        // raw ASTRO (9886) 0x54 / 0x7C exchanges, for `--dump`
+// Bluetooth devices Windows has a main device node for (paired), present or not, for `--dump` (generic.cpp).
+struct PairedBtDevice {
+    std::wstring name;
+    UINT64 addr = 0;
+    bool le = false;     // BTHLE node; otherwise classic (BTHENUM)
+    int connected = -1;  // -1 unknown, 0 no, 1 yes
+};
+std::vector<PairedBtDevice> PairedBluetoothDevices();
 void PollPulsar(PollContext& ctx);    // Pulsar X2 V3 / X2 V3 eS on 3710 (before Kysona, same vendor id)
 void PollAtkBitmouse(PollContext& ctx);  // ATK / VXE NK NANO dongle 373B:1216, ATK 8K Nano dongle 373B:1178 (before Kysona, same vendor id)
 void PollChimera(PollContext& ctx);      // Chimera V2 mouse (3554:F512, before Kysona, same vendor id)

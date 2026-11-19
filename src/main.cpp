@@ -1130,7 +1130,7 @@ int ListToConsole(bool dump) {
     if (dump) {
         // Also saved to a file: PowerShell does not wait for this windowed exe, so console output can end up
         // after the prompt or get lost, and a double-click has no console at all.
-        std::wstring text = DumpHidCollections();
+        std::wstring text = DumpHidCollections() + DumpFastPairAdverts();
         wchar_t path[MAX_PATH] = {};
         GetTempPathW(MAX_PATH, path);
         wcscat_s(path, L"BatteryHub-dump.txt");
