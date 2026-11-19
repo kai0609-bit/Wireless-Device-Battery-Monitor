@@ -314,6 +314,8 @@ void PollBluetooth(PollContext& ctx) {
     }
 
     bool watching = false, waited = false;
+    struct Unmatched { size_t index; int pct; };  // connected headsets no broadcast matched by address
+    std::vector<Unmatched> unmatched;
     for (auto& [cid, f] : battery) {
         if (reported.count(cid)) continue;
         auto mc = containerConn.find(cid);
@@ -358,9 +360,28 @@ void PollBluetooth(PollContext& ctx) {
             }
             waited |= justStarted;
             if (got) ApplyFastPair(s, b);
+            else unmatched.push_back({ ctx.out.size(), s.percent });
         }
         ctx.out.push_back(s);
         ctx.btContainers.insert(cid);
+    }
+
+    // Earbuds broadcasting from a random address (Sony WF-1000XM5) never match by address. Pair such a
+    // broadcast, heard in the last minute from an address no Windows device has, with a connected
+    // headset whose Windows level lies within its left..right span (+-3), when that pairing is unique.
+    // The short window keeps the earlier address of a device that just rotated it from competing.
+    if (!unmatched.empty()) {
+        std::set<UINT64> known;
+        for (const auto& [cid, a] : containerAddr) known.insert(a);
+        std::vector<FastPairBattery> adverts;
+        for (const auto& [a, b] : FastPairRecent(60 * 1000))
+            if (b.addrType == 1 && !known.count(a)) adverts.push_back(b);
+        std::vector<int> pcts;
+        std::vector<FastPair::Levels> levels(adverts.begin(), adverts.end());
+        for (const auto& u : unmatched) pcts.push_back(u.pct);
+        std::vector<int> match = FastPair::MatchByLevel(pcts, levels);
+        for (size_t i = 0; i < unmatched.size(); i++)
+            if (match[i] >= 0) ApplyFastPair(ctx.out[unmatched[i].index], adverts[match[i]]);
     }
 }
 

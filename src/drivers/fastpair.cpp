@@ -3,18 +3,12 @@
 // Fast Pair earbuds (Jabra Elite, Pixel Buds, many Sony / JBL / Bose models ...) put their battery in
 // the non-discoverable Fast Pair advertisement, in clear, for Android's battery popup. Windows only
 // reads one level (the standard Battery Service), so the Bluetooth fallback uses this for the split.
-// Service data of 16-bit UUID 0xFE2C, after the UUID:
-//   [0] version/flags (0x00), then fields with a header byte 0bLLLLTTTT (L = length, T = type):
-//   T 0 / 2  account key filter (shown / hidden UI)     T 1  salt
-//   T 3 / 4  battery (shown / hidden UI): one byte per component, in order left, right, case;
-//            bit 7 = charging, bits 0-6 = level 0-100, 0x7F = unknown
-//   T 5      remaining battery time
-// Discoverable-mode advertisements carry only the 3-byte model id (no version byte) and are ignored.
-// Layout from the Fast Pair specification (developers.google.com/nearby/fast-pair/specifications/
-// extensions/batterynotification); verified on a Jabra Elite 8 Active against the Sound+ app.
+// The service data layout and its parser are in fastpair_protocol.h; verified on a Jabra Elite 8
+// Active against the Sound+ app, and on a Sony WF-1000XM5 (version byte 0x10).
 //
-// Messages are matched to the paired device by Bluetooth address: the address must be the public
-// one Windows paired with (devices broadcasting from a rotating random address are not matched).
+// Messages are matched to the paired device by Bluetooth address: the public one Windows paired with.
+// Devices broadcasting from a random address (the WF-1000XM5) are paired by level instead, in
+// PollBluetooth: see FastPair::MatchByLevel.
 //
 // `--dump` lists every 0xFE2C section heard for a few seconds, parsed or not, next to the paired
 // devices' addresses, to see why a pair of earbuds shows no left / right split.
@@ -29,38 +23,6 @@ namespace {
 
 SRWLOCK g_lock = SRWLOCK_INIT;
 std::map<UINT64, FastPairBattery> g_battery;  // by Bluetooth address
-
-int Component(BYTE b, bool& charging) {
-    int level = b & 0x7F;
-    charging = level <= 100 && (b & 0x80) != 0;
-    return level <= 100 ? level : -1;
-}
-
-// `why` (optional) gets the reason when it returns false; only `--dump` asks for it.
-bool Parse(const BYTE* d, UINT32 n, FastPairBattery& out, const wchar_t** why = nullptr) {
-    auto fail = [&](const wchar_t* reason) {
-        if (why) *why = reason;
-        return false;
-    };
-    if (n < 2) return fail(n == 0 ? L"nothing after the UUID" : L"only 1 byte after the UUID");
-    // version 0; also skips the 3-byte discoverable model id
-    if (d[0] != 0x00)
-        return fail(n == 3 ? L"3 bytes, first not 0x00: discoverable-mode model id (no battery in it)"
-                           : L"first byte is not version 0x00");
-    for (UINT32 i = 1; i < n;) {
-        UINT32 len = d[i] >> 4, type = d[i] & 0x0F;
-        if (i + 1 + len > n) return fail(L"a field's length runs past the end of the data");
-        if ((type == 3 || type == 4) && len >= 1) {
-            out.left = Component(d[i + 1], out.leftChg);
-            if (len >= 2) out.right = Component(d[i + 2], out.rightChg);
-            if (len >= 3) out.box = Component(d[i + 3], out.boxChg);
-            return out.left >= 0 || out.right >= 0 || out.box >= 0 ||
-                   fail(L"battery field present, but every level is unknown (0x7F) or over 100");
-        }
-        i += 1 + len;
-    }
-    return fail(L"no battery field (type 3 / 4)");
-}
 
 // ---- `--dump` diagnostics -----------------------------------------------------------------------
 
@@ -109,9 +71,9 @@ std::wstring Hex(const std::vector<BYTE>& d) {
 }
 
 std::wstring Result(const std::vector<BYTE>& d) {
-    FastPairBattery b;
+    FastPair::Levels b;
     const wchar_t* why = L"";
-    if (!Parse(d.data(), (UINT32)d.size(), b, &why)) return std::wstring(L"parse failed: ") + why;
+    if (!FastPair::Parse(d.data(), d.size(), b, &why)) return std::wstring(L"parse failed: ") + why;
     auto part = [](const wchar_t* label, int pct, bool chg) {
         return std::wstring(label) + (pct < 0 ? L"?" : std::to_wstring(pct) + L"%") + (chg ? L" (charging)" : L"");
     };
@@ -121,10 +83,11 @@ std::wstring Result(const std::vector<BYTE>& d) {
 
 }  // namespace
 
-void FastPairOnAdvert(UINT64 addr, const BYTE* data, UINT32 len) {
+void FastPairOnAdvert(UINT64 addr, int addrType, const BYTE* data, UINT32 len) {
     FastPairBattery b;
-    if (!Parse(data, len, b)) return;
+    if (!FastPair::Parse(data, len, b)) return;
     b.tick = GetTickCount64();
+    b.addrType = addrType;
     AcquireSRWLockExclusive(&g_lock);
     g_battery[addr] = b;
     ReleaseSRWLockExclusive(&g_lock);
@@ -138,6 +101,16 @@ bool FastPairLookup(UINT64 addr, FastPairBattery& out) {
     if (ok) out = it->second;
     ReleaseSRWLockShared(&g_lock);
     return ok;
+}
+
+std::vector<std::pair<UINT64, FastPairBattery>> FastPairRecent(ULONGLONG maxAgeMs) {
+    std::vector<std::pair<UINT64, FastPairBattery>> out;
+    ULONGLONG now = GetTickCount64();
+    AcquireSRWLockShared(&g_lock);
+    for (const auto& [addr, b] : g_battery)
+        if (now - b.tick < maxAgeMs) out.push_back({ addr, b });
+    ReleaseSRWLockShared(&g_lock);
+    return out;
 }
 
 bool FastPairDiagActive() { return g_diagOn.load(std::memory_order_relaxed); }

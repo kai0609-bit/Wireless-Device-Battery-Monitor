@@ -128,7 +128,7 @@ bool Bytes(IBufferAbi* buf, BYTE*& p, UINT32& len) {
     return ok;
 }
 
-// Public / random, when this Windows exposes it (-1 otherwise). Only asked for during `--dump`.
+// Public / random, when this Windows exposes it (-1 otherwise).
 int AddressType(IReceivedArgs* args) {
     IReceivedArgs2* a2 = nullptr;
     INT32 t = -1;
@@ -174,8 +174,9 @@ void OnReceived(IReceivedArgs* args) {
             // Service data starts with the 16-bit UUID, little-endian: 2C FE = Google Fast Pair.
             if (SUCCEEDED(sview->GetAt(i, &sec)) && sec && SUCCEEDED(sec->get_Data(&buf)) && Bytes(buf, p, len) && len >= 2 &&
                 p[0] == 0x2C && p[1] == 0xFE) {
-                if (len > 2) FastPairOnAdvert(addr, p + 2, len - 2);
-                if (FastPairDiagActive()) FastPairDiagRecord(addr, AddressType(args), rssi, p + 2, len - 2);
+                int type = AddressType(args);
+                if (len > 2) FastPairOnAdvert(addr, type, p + 2, len - 2);
+                if (FastPairDiagActive()) FastPairDiagRecord(addr, type, rssi, p + 2, len - 2);
             }
             Release(buf);
             Release(sec);
